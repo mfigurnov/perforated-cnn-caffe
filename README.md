@@ -4,7 +4,7 @@ PerforatedCNNs accelerate convolutional neural networks (CNNs) by skipping evalu
 
 Michael Figurnov, Dmitry Vetrov, Pushmeet Kohli. PerforatedCNNs: Acceleration through Elimination of Redundant Convolutions. _Under review as a conference paper at ICLR 2016_ [[arXiv](http://arxiv.org/abs/1504.08362)].
 
-The code is based on Caffe from October 2015. The main purpose of this code is to fine-tune large models (AlexNet and VGG16). 
+The code is based on Caffe from October 2015.
 
 See also [MatConvNet](https://github.com/mfigurnov/perforated-cnn-matconvnet) implementation of PerforatedCNNs.
 Differences between the two versions:
