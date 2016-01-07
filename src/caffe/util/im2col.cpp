@@ -190,5 +190,98 @@ template void col2im_nd_cpu<double>(const double* data_col,
     const int* kernel_shape, const int* pad, const int* stride,
     double* data_im);
 
+template <typename Dtype>
+void im2col_perf_cpu(const Dtype* data_im, const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices,
+    Dtype* data_col) {
+  // int height_col = (height + 2 * pad_h - kernel_h) / stride_h + 1;
+  int width_col = (width + 2 * pad_w - kernel_w) / stride_w + 1;
+  int channels_col = channels * kernel_h * kernel_w;
+  for (int s = 0; s < size; ++s) {
+    for (int c = 0; c < channels_col; ++c) {
+      int w_offset = c % kernel_w;
+      int h_offset = (c / kernel_w) % kernel_h;
+      int c_im = c / kernel_h / kernel_w;
+
+      for (int i = 0; i < non_perforated; ++i) {
+        unsigned int spatial_index = non_perforated_indices[i];
+        unsigned int h = spatial_index / width_col;
+        unsigned int w = spatial_index % width_col;
+        int h_pad = h * stride_h - pad_h + h_offset;
+        int w_pad = w * stride_w - pad_w + w_offset;
+        if (h_pad >= 0 && h_pad < height && w_pad >= 0 && w_pad < width)
+          data_col[(c * size + s) * non_perforated + i] =
+            data_im[((s * channels + c_im) * height + h_pad) * width + w_pad];
+        else
+          data_col[(c * size + s) * non_perforated + i] = 0;
+      }
+    }
+  }
+}
+
+// Explicit instantiation
+template void im2col_perf_cpu<float>(const float* data_im, const int size,
+    const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, const int stride_h,
+    const int stride_w, const unsigned int* non_perforated_indices,
+    float* data_col);
+template void im2col_perf_cpu<double>(const double* data_im, const int size,
+    const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, const int stride_h,
+    const int stride_w, const unsigned int* non_perforated_indices,
+    double* data_col);
+
+template <typename Dtype>
+void col2im_perf_cpu(const Dtype* data_col, const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices,
+    Dtype* data_im) {
+  caffe_set(height * width * channels * size, Dtype(0), data_im);
+  // int height_col = (height + 2 * pad_h - kernel_h) / stride_h + 1;
+  int width_col = (width + 2 * pad_w - kernel_w) / stride_w + 1;
+  int channels_col = channels * kernel_h * kernel_w;
+  for (int s = 0; s < size; ++s) {
+    for (int c = 0; c < channels_col; ++c) {
+      int w_offset = c % kernel_w;
+      int h_offset = (c / kernel_w) % kernel_h;
+      int c_im = c / kernel_h / kernel_w;
+      for (int i = 0; i < non_perforated; ++i) {
+        unsigned int spatial_index = non_perforated_indices[i];
+        unsigned int h = spatial_index / width_col;
+        unsigned int w = spatial_index % width_col;
+        int h_pad = h * stride_h - pad_h + h_offset;
+        int w_pad = w * stride_w - pad_w + w_offset;
+        if (h_pad >= 0 && h_pad < height && w_pad >= 0 && w_pad < width)
+          data_im[((s * channels + c_im) * height + h_pad) * width + w_pad] +=
+              data_col[(c * size + s) * non_perforated + i];
+      }
+    }
+  }
+}
+
+// Explicit instantiation
+template void col2im_perf_cpu<float>(const float* data_col, const int size,
+    const int channels, const int height, const int width,
+    const int non_perforated,
+    const int kernel_h, const int kernel_w, const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices, float* data_im);
+template void col2im_perf_cpu<double>(const double* data_col, const int size,
+    const int channels, const int height, const int width,
+    const int non_perforated,
+    const int kernel_h, const int kernel_w, const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices, double* data_im);
 
 }  // namespace caffe

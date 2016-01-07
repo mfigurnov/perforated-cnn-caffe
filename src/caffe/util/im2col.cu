@@ -1,7 +1,9 @@
 #include <algorithm>
 
+#include "caffe/common.cuh"
 #include "caffe/common.hpp"
 #include "caffe/util/im2col.hpp"
+#include "caffe/util/math_functions.hpp"
 
 namespace caffe {
 
@@ -435,6 +437,141 @@ void col2im_nd_gpu(const Dtype* data_col, const int num_spatial_axes,
   CUDA_POST_KERNEL_CHECK;
 }
 
+template <typename Dtype>
+__global__ void im2col_perf_gpu_kernel(const int n, const Dtype* data_im,
+    const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const int height_col, const int width_col,
+    const unsigned int* non_perforated_indices,
+    Dtype* data_col) {
+  CUDA_KERNEL_LOOP(index, n) {
+    int pos_out = index % non_perforated;
+    int channel_in = index / non_perforated;
+    int s = channel_in / channels;
+    channel_in %= channels;
+
+    int w_index = non_perforated_indices[pos_out];
+    int w_out = w_index % width_col;
+    int h_out = w_index / width_col;
+    int channel_out = channel_in * kernel_h * kernel_w;
+    int h_in = h_out * stride_h - pad_h;
+    int w_in = w_out * stride_w - pad_w;
+    Dtype* data_col_ptr = data_col;
+    data_col_ptr += (channel_out * size + s) * non_perforated + pos_out;
+    const Dtype* data_im_ptr = data_im;
+    data_im_ptr += ((s * channels + channel_in) * height + h_in) * width + w_in;
+    for (int i = 0; i < kernel_h; ++i) {
+      for (int j = 0; j < kernel_w; ++j) {
+        int h = h_in + i;
+        int w = w_in + j;
+        *data_col_ptr = (h >= 0 && w >= 0 && h < height && w < width) ?
+            data_im_ptr[i * width + j] : 0;
+        data_col_ptr += non_perforated * size;
+      }
+    }
+  }
+}
+
+template <typename Dtype>
+void im2col_perf_gpu(const Dtype* data_im, const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices,
+    Dtype* data_col) {
+  // We are going to launch channels * non_perforated kernels, each
+  // kernel responsible for copying a single-channel grid.
+  int height_col = (height + 2 * pad_h - kernel_h) / stride_h + 1;
+  int width_col = (width + 2 * pad_w - kernel_w) / stride_w + 1;
+  int num_kernels = size * channels * non_perforated;
+  // NOLINT_NEXT_LINE(whitespace/operators)
+  im2col_perf_gpu_kernel<Dtype><<<CAFFE_GET_BLOCKS(num_kernels),
+                                  CAFFE_CUDA_NUM_THREADS>>>(
+      num_kernels, data_im, size, channels, height, width, non_perforated,
+      kernel_h, kernel_w, pad_h,
+      pad_w, stride_h, stride_w, height_col,
+      width_col, non_perforated_indices, data_col);
+  CUDA_POST_KERNEL_CHECK;
+}
+
+
+// Explicit instantiation
+template void im2col_perf_gpu<float>(const float* data_im, const int size,
+    const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices, float* data_col);
+template void im2col_perf_gpu<double>(const double* data_im, const int size,
+    const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices, double* data_col);
+
+template <typename Dtype>
+__global__ void col2im_perf_gpu_kernel(const int n, const Dtype* data_col,
+    const int height, const int width, const int channels, const int size,
+    const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const int height_col, const int width_col,
+    const unsigned int* non_perforated_indices,
+    Dtype* data_im) {
+  CUDA_KERNEL_LOOP(index, n) {
+    int pos_out = index % non_perforated;
+    int channel_in = index / non_perforated;
+    int s = channel_in / channels;
+    channel_in %= channels;
+
+    int w_index = non_perforated_indices[pos_out];
+    int w_out = w_index % width_col;
+    int h_out = w_index / width_col;
+    int channel_out = channel_in * kernel_h * kernel_w;
+    int h_in = h_out * stride_h - pad_h;
+    int w_in = w_out * stride_w - pad_w;
+    const Dtype* data_col_ptr = data_col;
+    data_col_ptr += (channel_out * size + s) * non_perforated + pos_out;
+    Dtype* data_im_ptr = data_im;
+    data_im_ptr += ((s * channels + channel_in) * height + h_in) * width + w_in;
+    for (int i = 0; i < kernel_h; ++i) {
+      for (int j = 0; j < kernel_w; ++j) {
+        int h = h_in + i;
+        int w = w_in + j;
+        if (h >= 0 && w >= 0 && h < height && w < width) {
+          atomicAdd(&data_im_ptr[i * width + j], *data_col_ptr);
+        }
+        data_col_ptr += non_perforated * size;
+      }
+    }
+  }
+}
+
+template <typename Dtype>
+void col2im_perf_gpu(const Dtype* data_col, const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, const int stride_h,
+    const int stride_w, const unsigned int* non_perforated_indices,
+    Dtype* data_im) {
+  int height_col = (height + 2 * pad_h - kernel_h) / stride_h + 1;
+  int width_col = (width + 2 * pad_w - kernel_w) / stride_w + 1;
+  caffe_gpu_set(size * channels * height * width, Dtype(0), data_im);
+  int num_kernels = size * channels * non_perforated;
+  // NOLINT_NEXT_LINE(whitespace/operators)
+  col2im_perf_gpu_kernel<Dtype><<<CAFFE_GET_BLOCKS(num_kernels),
+                                  CAFFE_CUDA_NUM_THREADS>>>(
+      num_kernels, data_col, height, width, channels, size, non_perforated,
+      kernel_h, kernel_w, pad_h, pad_w, stride_h, stride_w,
+      height_col, width_col, non_perforated_indices, data_im);
+  CUDA_POST_KERNEL_CHECK;
+}
+
 // Explicit instantiation
 template void col2im_nd_gpu<float>(const float* data_col,
     const int num_spatial_axes, const int im_size,
@@ -445,6 +582,21 @@ template void col2im_nd_gpu<double>(const double* data_col,
     const int num_spatial_axes, const int im_size,
     const int* im_shape, const int* col_shape,
     const int* kernel_shape, const int* pad, const int* stride,
+    double* data_im);
+
+template void col2im_perf_gpu<float>(const float* data_col, const int size,
+    const int channels, const int height, const int width,
+    const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, const int stride_h,
+    const int stride_w, const unsigned int* non_perforated_indices,
+    float* data_im);
+template void col2im_perf_gpu<double>(const double* data_col, const int size,
+    const int channels, const int height, const int width,
+    const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, const int stride_h,
+    const int stride_w, const unsigned int* non_perforated_indices,
     double* data_im);
 
 }  // namespace caffe

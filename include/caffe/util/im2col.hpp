@@ -51,6 +51,41 @@ void col2im_gpu(const Dtype* data_col, const int channels,
     const int pad_h, const int pad_w, const int stride_h,
     const int stride_w, Dtype* data_im);
 
+template <typename Dtype>
+void im2col_perf_cpu(const Dtype* data_im, const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices,
+    Dtype* data_col);
+
+template <typename Dtype>
+void col2im_perf_cpu(const Dtype* data_col, const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices,
+    Dtype* data_im);
+
+template <typename Dtype>
+void im2col_perf_gpu(const Dtype* data_im, const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w,
+    const int stride_h, const int stride_w,
+    const unsigned int* non_perforated_indices,
+    Dtype* data_col);
+
+template <typename Dtype>
+void col2im_perf_gpu(const Dtype* data_col, const int size, const int channels,
+    const int height, const int width, const int non_perforated,
+    const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, const int stride_h,
+    const int stride_w, const unsigned int* non_perforated_indices,
+    Dtype* data_im);
+
 }  // namespace caffe
 
 #endif  // CAFFE_UTIL_IM2COL_HPP_
