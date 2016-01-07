@@ -1,3 +1,17 @@
+# perforated-cnn-caffe
+
+PerforatedCNNs accelerate convolutional neural networks (CNNs) by skipping evaluation of the convolutional layers in some of the spatial positions. See the paper for more details:
+
+Michael Figurnov, Dmitry Vetrov, Pushmeet Kohli. PerforatedCNNs: Acceleration through Elimination of Redundant Convolutions. _Under review as a conference paper at ICLR 2016_ [[arXiv](http://arxiv.org/abs/1504.08362)].
+
+The code is based on Caffe from October 2015. The main purpose of this code is to fine-tune large models (AlexNet and VGG16). 
+
+See also [MatConvNet](https://github.com/mfigurnov/perforated-cnn-matconvnet) implementation of PerforatedCNNs.
+Differences between the two versions:
+
+1. Caffe version does not support perforating a network. For the purposes of the paper, we performed perforation in MatConvNet code, and then imported the network using `python/import_matconvnet.py` script.
+2. Caffe version performs explicit interpolation of outputs in `ConvolutionPerforatedLayer`. This makes this implementation more self-contained, compared to MatConvNet implementation with implicit interpolation, as there is no need to tweak indices of reads of the next layer. However, this means that no memory is saved for storage of intermediate outputs, and that the speedup might be lower (especially for CPU version).
+
 # Original Caffe README
 
 [![Build Status](https://travis-ci.org/BVLC/caffe.svg?branch=master)](https://travis-ci.org/BVLC/caffe)
