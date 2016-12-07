@@ -2,7 +2,7 @@
 
 PerforatedCNNs accelerate convolutional neural networks (CNNs) by skipping evaluation of the convolutional layers in some of the spatial positions. See the paper for more details:
 
-Michael Figurnov, Dmitry Vetrov, Pushmeet Kohli. PerforatedCNNs: Acceleration through Elimination of Redundant Convolutions. _Under review as a conference paper at ICLR 2016_ [[arXiv](http://arxiv.org/abs/1504.08362)].
+Michael Figurnov, Aijan Ibraimova, Dmitry Vetrov, Pushmeet Kohli. PerforatedCNNs: Acceleration through Elimination of Redundant Convolutions. _NIPS 2016_ [[arXiv](http://arxiv.org/abs/1504.08362)].
 
 The code is based on Caffe from October 2015.
 
